@@ -1,0 +1,148 @@
+!nvcc --version
+%%writefile add_vector.cu
+
+#include<iostream>
+#include<cuda.h>
+
+#define BLOCK_SIZE 16
+
+using namespace std;
+
+// CPU Vector Addition
+void add_cpu(int *arr1, int *arr2, int *result, int size){
+
+    for(int i = 0; i < size; i++){
+
+        result[i] = arr1[i] + arr2[i];
+    }
+}
+
+// Print Array
+void print_array(int *arr, int size){
+
+    for(int i = 0; i < size; i++){
+
+        cout << arr[i] << " ";
+    }
+
+    cout << endl;
+}
+
+// CUDA Kernel
+__global__ void add(int *arr1, int *arr2, int *arr3, int size){
+
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if(idx < size){
+
+        arr3[idx] = arr1[idx] + arr2[idx];
+    }
+}
+
+int main(){
+
+    int size;
+
+    cout << "Enter size of vector: ";
+    cin >> size;
+
+    // CPU Arrays
+    int *arr1_cpu = new int[size];
+    int *arr2_cpu = new int[size];
+    int *result_cpu = new int[size];
+
+    // Input Array 1
+    cout << "Enter elements of Array 1:\n";
+
+    for(int i = 0; i < size; i++){
+
+        cin >> arr1_cpu[i];
+    }
+
+    // Input Array 2
+    cout << "Enter elements of Array 2:\n";
+
+    for(int i = 0; i < size; i++){
+
+        cin >> arr2_cpu[i];
+    }
+
+    // GPU Arrays
+    int *arr1_gpu, *arr2_gpu, *result_gpu;
+
+    cudaMallocManaged(&arr1_gpu, size * sizeof(int));
+    cudaMallocManaged(&arr2_gpu, size * sizeof(int));
+    cudaMallocManaged(&result_gpu, size * sizeof(int));
+
+    // Copy CPU to GPU
+    cudaMemcpy(arr1_gpu, arr1_cpu, size * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(arr2_gpu, arr2_cpu, size * sizeof(int), cudaMemcpyHostToDevice);
+
+    // CUDA Event Variables
+    cudaEvent_t start, stop;
+
+    float elapsedTime;
+
+    // Grid and Block Dimensions
+    dim3 dimBlock(BLOCK_SIZE);
+
+    dim3 dimGrid((size + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
+    // GPU Timing Start
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    cudaEventRecord(start, 0);
+
+    // Launch Kernel
+    add<<<dimGrid, dimBlock>>>(arr1_gpu, arr2_gpu, result_gpu, size);
+
+    cudaDeviceSynchronize();
+
+    // GPU Timing Stop
+    cudaEventRecord(stop, 0);
+
+    cudaEventSynchronize(stop);
+
+    cudaEventElapsedTime(&elapsedTime, start, stop);
+
+    // Copy Result to CPU
+    cudaMemcpy(result_cpu, result_gpu, size * sizeof(int), cudaMemcpyDeviceToHost);
+
+    cout << "\nGPU Result:\n";
+
+    print_array(result_cpu, size);
+
+    cout << "GPU Elapsed Time = " << elapsedTime << " ms\n";
+
+    // CPU Timing
+    cudaEventRecord(start, 0);
+
+    add_cpu(arr1_cpu, arr2_cpu, result_cpu, size);
+
+    cudaEventRecord(stop, 0);
+
+    cudaEventSynchronize(stop);
+
+    cudaEventElapsedTime(&elapsedTime, start, stop);
+
+    cout << "\nCPU Result:\n";
+
+    print_array(result_cpu, size);
+
+    cout << "CPU Elapsed Time = " << elapsedTime << " ms\n";
+
+    // Free Memory
+    cudaFree(arr1_gpu);
+    cudaFree(arr2_gpu);
+    cudaFree(result_gpu);
+
+    delete[] arr1_cpu;
+    delete[] arr2_cpu;
+    delete[] result_cpu;
+
+    return 0;
+}
+
+//!nvcc add_vector.cu -o add_vector
+//!./add_vector
